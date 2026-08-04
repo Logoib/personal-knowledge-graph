@@ -1,0 +1,19 @@
+# Local/generated state
+.obsidian/workspace*.json
+.obsidian/cache/
+.trash/
+tools/.cache/
+__pycache__/
+*.pyc
+outputs/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

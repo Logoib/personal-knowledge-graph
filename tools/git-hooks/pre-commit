@@ -1,0 +1,53 @@
+#!/bin/sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Python 인터프리터 1회 탐색 (py 런처 우선 — Windows CLAUDE.md 규칙)
+if command -v py >/dev/null 2>&1; then
+  PY="py -3"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+elif command -v python >/dev/null 2>&1; then
+  PY="python"
+else
+  echo "Python was not found. Install Python 3 or run: py -3 tools/kb_link_health.py --strict"
+  exit 1
+fi
+
+# 1) 레지스트리 신선도(계산형 뷰) — stale하면 커밋 차단
+if ! $PY tools/kb_compile_registry.py --check >/dev/null; then
+  echo "pre-commit: 레지스트리가 stale합니다. 다음 실행 후 재커밋하세요:"
+  echo "  py -3 tools/kb_compile_registry.py --write"
+  $PY tools/kb_compile_registry.py --check || true
+  exit 1
+fi
+
+# 2) curated wiki 본문과 검색 라우터의 co-change guard.
+#    본문만 고치고 _summaries.md를 빼먹은 2026-07-09→22 lookup 오진을 재발 방지한다.
+staged_wiki="$(
+  git diff --cached --name-only --diff-filter=ACMR -- \
+    'wiki/concepts/*.md' 'wiki/articles/*.md' 'wiki/connections/*.md'
+)"
+staged_summaries="$(git diff --cached --name-only -- wiki/_summaries.md)"
+if [ -n "$staged_wiki" ] && [ -z "$staged_summaries" ]; then
+  echo "pre-commit: wiki 본문이 바뀌었는데 wiki/_summaries.md가 staged되지 않았습니다."
+  echo "  lookup 라우터 요약을 확인·갱신한 뒤 함께 stage하세요."
+  exit 1
+fi
+
+# 3) 링크·온톨로지 스키마 검사
+$PY tools/kb_link_health.py --strict
+
+# --- AGENTS.md == CLAUDE.md == GEMINI.md identity guard ---
+# 어떤 AI 런타임에서도 동일 규칙이 적용되도록 세 파일을 항상 byte-identical로 유지한다.
+for f in AGENTS.md GEMINI.md; do
+  if [ -f "$f" ] && [ -f CLAUDE.md ]; then
+    if ! cmp -s "$f" CLAUDE.md; then
+      echo "pre-commit: $f differs from CLAUDE.md (tri-file must stay identical). Run:"
+      echo "  Copy CLAUDE.md to AGENTS.md and GEMINI.md, then review all three."
+      exit 1
+    fi
+  fi
+done

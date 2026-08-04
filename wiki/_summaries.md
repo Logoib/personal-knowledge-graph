@@ -1,0 +1,16 @@
+# Personal KG Summaries
+
+- [concepts/personal-knowledge-graph.md] — raw 원본, curated wiki, 규칙·도구를 분리하고 ranked lookup으로 필요한 지식만 회수하는 개인 Markdown/Git KG 시스템 (#personal-kg #obsidian #agent-memory)
+- [concepts/knowledge-graph-operating-philosophy.md] — 저장보다 선별, 원본과 해석 분리, just-in-time 회수, 계산 가능한 자동화만 허용하는 KG 운영 원칙 (#knowledge-graph #curation #context)
+- [concepts/ontology.md] — glossary→taxonomy→typed relation의 의미 계층을 설명하고 개인 KG에는 ontology-ready Markdown만 선택 적용 (#ontology #semantic-layer)
+- [concepts/loop-engineering-hitl-boundary.md] — 합격기준의 위치로 Tier A 무인·Tier B 승인·Tier C 사람 수행을 구분하는 agent 자동화 경계 (#loop-engineering #hitl)
+- [articles/kg-operations-tooling.md] — 비파괴 registry compiler, Kiwi/BM25 lookup, link·ontology health, pre-commit gate의 역할과 경계 (#tooling #health #registry)
+- [articles/kiwi-bm25-retrieval.md] — Kiwi 형태소와 SQLite FTS5 BM25로 한국어 Markdown을 랭킹하고 색인 stale 시 substring으로 안전 폴백 (#kiwi #bm25 #fts5)
+- [articles/context-rot-agent-loop-design.md] — 고정 token cliff 대신 fresh context capsule, 단계·모순·stale 신호, evidence 기반 stop/refresh/recovery로 장기 agent 신뢰성 유지 (#context-rot #agent-loop)
+- [articles/context-isolation-for-lookup.md] — corpus 전체 대신 ranked path/snippet과 필요한 1~3개 본문만 읽어 lookup이 context rot을 만들지 않게 하는 계약 (#lookup #context-isolation)
+- [articles/skill-source-of-truth.md] — Codex·Claude·Gemini runtime skill을 junction으로 하나의 agent-hub 원본에 연결해 사본 drift를 방지 (#agent-skill #single-source)
+- [articles/unknowns-matrix-and-knowledge-capture.md] — known/unknown 4사분면으로 암묵지·blindspot을 분류하고 실패를 다음 작업의 재사용 지식으로 전환 (#unknowns #tacit-knowledge)
+- [articles/provenance-and-freshness.md] — current user·live system·repo evidence를 wiki보다 우선하고 URL/repo path/revision으로 출처와 stale 신호를 관리 (#provenance #freshness)
+- [connections/markdown-wiki-vs-formal-ontology.md] — 서술·판단 근거는 Markdown/Git에, 안정된 객체·반복 관계 질의만 formal ontology 후보로 두는 역할 경계 (#comparison #ontology)
+- [connections/curated-knowledge-vs-runtime-memory.md] — curated KG, 자동 runtime memory, session context를 별도 계층으로 유지해 신뢰·마찰·context 비용을 통제 (#agent-memory #curated-knowledge)
+- [connections/knowledge-capture-to-agent-execution.md] — raw evidence→curated note→ranked lookup→repeatable skill→verifier/HITL→새 교훈으로 이어지는 운영 루프 (#knowledge-capture #agent-execution)
