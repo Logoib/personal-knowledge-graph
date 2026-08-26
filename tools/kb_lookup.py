@@ -14,6 +14,9 @@ from kb_paths import resolve_kb_root
 
 ROOT = resolve_kb_root()
 WIKI = ROOT / "wiki"
+FOLDERS = ("concepts", "articles", "connections")
+WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)")
+SUMMARY_LINE_RE = re.compile(r"^- \[((?:concepts|articles|connections)/[^\]]+?\.md)\]\s*[—-]\s*(.+)$")
 
 
 def clean(value: str) -> str:
@@ -22,7 +25,7 @@ def clean(value: str) -> str:
 
 def substring_hits(query: str, limit: int, include_raw: bool) -> list[dict]:
     paths = [WIKI / "_summaries.md", WIKI / "_index.md", WIKI / "glossary.md"]
-    for folder in ("concepts", "articles", "connections"):
+    for folder in FOLDERS:
         paths.extend(sorted((WIKI / folder).glob("*.md")))
     if include_raw and (ROOT / "raw").exists():
         paths.extend(sorted((ROOT / "raw").rglob("*.md")))
@@ -67,8 +70,93 @@ def lookup(query: str, limit: int, engine: str, include_raw: bool) -> tuple[str,
     return "substr", substring_hits(query, limit, include_raw)
 
 
+# --- 1-hop traversal -------------------------------------------------------
+# A hit note usually links to the note that actually holds the answer. Offer
+# those links as candidates (path + one-line summary, body not loaded) so the
+# caller can take one more hop instead of guessing. Links come from note
+# bodies, not a backlink registry, so unregistered notes still participate.
+
+
+def note_paths() -> list[Path]:
+    return [p for folder in FOLDERS for p in sorted((WIKI / folder).glob("*.md"))]
+
+
+def summary_lines() -> dict[str, str]:
+    """'wiki/articles/x.md' -> one-line summary, tag tail stripped."""
+    path = WIKI / "_summaries.md"
+    if not path.exists():
+        return {}
+    out: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        match = SUMMARY_LINE_RE.match(clean(line))
+        if match:
+            out[f"wiki/{match.group(1)}"] = re.sub(r"\s*\(#[^)]*\)\s*$", "", match.group(2)).strip()
+    return out
+
+
+def link_graph() -> tuple[dict[str, set], dict[str, set]]:
+    """One scan of the wiki -> (outbound, inbound), keyed by 'wiki/<folder>/<name>.md'.
+
+    ponytail: rescans every call. Add an mtime cache if the vault reaches thousands of notes.
+    """
+    by_stem = {p.stem: p.relative_to(ROOT).as_posix() for p in note_paths()}
+    out_map: dict[str, set] = {}
+    in_map: dict[str, set] = {}
+    for path in note_paths():
+        src = path.relative_to(ROOT).as_posix()
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        targets = {by_stem[stem] for stem in
+                   (n.strip().split("/")[-1].removesuffix(".md") for n in WIKILINK_RE.findall(text))
+                   if stem in by_stem}
+        targets.discard(src)
+        for dst in targets:
+            out_map.setdefault(src, set()).add(dst)
+            in_map.setdefault(dst, set()).add(src)
+    return out_map, in_map
+
+
+def neighbors(rel: str, out_map: dict, in_map: dict, summaries: dict, cap: int) -> list[dict]:
+    """1-hop candidates: outbound first, inbound fills the rest."""
+    if cap <= 0 or not rel.startswith("wiki/"):
+        return []
+    picked: list[dict] = []
+    seen = {rel}
+    for arrow, source in (("->", out_map), ("<-", in_map)):
+        for dst in sorted(source.get(rel, ())):
+            if dst in seen:
+                continue
+            seen.add(dst)
+            picked.append({"arrow": arrow, "path": dst, "summary": summaries.get(dst, "")})
+            if len(picked) == cap:
+                return picked
+    return picked
+
+
 def demo() -> int:
     assert clean(" a  b\n c ") == "a b c"
+
+    out_map = {"wiki/articles/a.md": {"wiki/articles/b.md", "wiki/concepts/c.md"}}
+    in_map = {"wiki/articles/a.md": {"wiki/articles/z.md"}}
+    summaries = {"wiki/articles/b.md": "B summary"}
+
+    got = neighbors("wiki/articles/a.md", out_map, in_map, summaries, 4)
+    assert [n["path"] for n in got] == ["wiki/articles/b.md", "wiki/concepts/c.md", "wiki/articles/z.md"], got
+    assert [n["arrow"] for n in got] == ["->", "->", "<-"], got
+    assert got[0]["summary"] == "B summary" and got[1]["summary"] == ""
+    # cap fills outbound first so inbound-only notes never crowd out real links
+    assert [n["path"] for n in neighbors("wiki/articles/a.md", out_map, in_map, summaries, 2)] == [
+        "wiki/articles/b.md", "wiki/concepts/c.md"]
+    assert neighbors("wiki/articles/a.md", out_map, in_map, summaries, 0) == []
+    assert neighbors("raw/articles/a.md", out_map, in_map, summaries, 4) == []
+    # a note linking to itself is not its own neighbour
+    assert neighbors("wiki/articles/b.md", {"wiki/articles/b.md": {"wiki/articles/b.md"}}, {}, {}, 4) == []
+
+    assert WIKILINK_RE.findall("see [[machine-inventory]] and [[a|alias]]") == ["machine-inventory", "a"]
+    assert WIKILINK_RE.findall("[[wiki/concepts/x#section]]") == ["wiki/concepts/x"]
+    match = SUMMARY_LINE_RE.match("- [articles/x.md] — body text (#tag1 #tag2)")
+    assert match and match.group(1) == "articles/x.md"
+    assert re.sub(r"\s*\(#[^)]*\)\s*$", "", match.group(2)).strip() == "body text"
+
     print("kb_lookup selftest OK")
     return 0
 
@@ -79,6 +167,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--limit", type=int, default=6)
     parser.add_argument("--engine", choices=("fts", "substr"), default="fts")
     parser.add_argument("--include-raw", action="store_true")
+    parser.add_argument("--neighbors", type=int, default=4, metavar="N",
+                        help="show up to N 1-hop neighbour candidates per hit (0 disables)")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args(argv)
     if args.selftest:
@@ -91,9 +181,16 @@ def main(argv: list[str]) -> int:
     if not hits:
         print("  none")
         return 0
+    summaries = summary_lines() if args.neighbors > 0 else {}
+    out_map, in_map = link_graph() if args.neighbors > 0 else ({}, {})
     for index, item in enumerate(hits, start=1):
         print(f"  [{index}] {item['path']}")
         print(f"      {item['snippet']}")
+        for neighbour in neighbors(item["path"], out_map, in_map, summaries, args.neighbors):
+            summary = neighbour["summary"]
+            if len(summary) > 100:
+                summary = summary[:100] + "..."
+            print(f"      {neighbour['arrow']} {neighbour['path']}{f' - {summary}' if summary else ''}")
     if not args.include_raw:
         print("\n  > Curated wiki only. Add --include-raw when original provenance is needed.")
     return 0
