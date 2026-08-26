@@ -17,9 +17,10 @@ Resolve the KG root from `PERSONAL_KG_ROOT`, `%USERPROFILE%\.personal-kg\root.tx
 
 1. Run `py -3 <KG_ROOT>\tools\kb_lookup.py --query "<topic>" --limit 6`.
 2. Open only the 1–3 ranked wiki notes needed for the request.
-3. Add `--include-raw` only when provenance or original detail is necessary.
-4. Treat the current user, live system, and target repository as more authoritative than saved notes. Surface stale or conflicting claims.
-5. Return the answer and the KG-relative note paths used.
-6. One lookup does not settle the session. Look up again whenever the objective, the topic, or the evidence you need changes — an earlier lookup on a different topic is not an answer to the new fact. After a compaction or a long stretch of unrelated work, treat prior results as stale and look them up again rather than recalling them.
+3. Each hit is followed by `->` / `<-` lines — the notes it links to and the notes linking back, as candidates with a one-line summary and no body loaded. Expand one only when the ranked notes left the answer incomplete: the fact you needed is absent, or the note hands off elsewhere. Then open that neighbour rather than guessing or web-searching. Stop as soon as the evidence is sufficient and do not go past one hop in a single query — re-query instead. `--neighbors 0` turns the candidates off.
+4. Add `--include-raw` only when provenance or original detail is necessary.
+5. Treat the current user, live system, and target repository as more authoritative than saved notes. Surface stale or conflicting claims.
+6. Return the answer and the KG-relative note paths used.
+7. One lookup does not settle the session. Look up again whenever the objective, the topic, or the evidence you need changes — an earlier lookup on a different topic is not an answer to the new fact. After a compaction or a long stretch of unrelated work, treat prior results as stale and look them up again rather than recalling them.
 
 Do not read the whole `_summaries.md` or preload the vault. Rebuild a stale index with `py -3 <KG_ROOT>\tools\kb_index_build.py`.
